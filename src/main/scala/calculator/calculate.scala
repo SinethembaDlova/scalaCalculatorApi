@@ -1,16 +1,35 @@
 package calculator
 
+import java.util.UUID
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server._
 import akka.stream.ActorMaterializer
 import scala.io.StdIn
-
+import authentikat.jwt.{JsonWebToken, JwtClaimsSet, JwtHeader}
 import io.circe._
 import io.circe.generic.auto._
 import io.circe.parser._
 import io.circe.syntax._
+import monix.execution.Scheduler
+import monix.execution.schedulers.SchedulerService
+import org.slf4j.LoggerFactory
+
+import scala.language.postfixOps
+import scala.util.{Failure, Success}
+
+case class Scopes(jit: Option[String], scopes: List[Scope])
+case class Scope(scope: String, actions: List[String])
+case class JWT(iat: Long, jit: String, scopes: List[Scope])
+
+case class JWTString(jwt: String)
+case class Error(message: String, desc: String)
+case class Response[A](data: Option[A], errors: Option[List[Error]])
+
+case class DefaultResponse(status: String)
+
 
 case class Add(x:Int, y: Int)
 case class Subtract(x:Int, y:Int)
@@ -21,8 +40,41 @@ object calculate extends App {
 
   implicit val system = ActorSystem("my-system")
   implicit val materializer = ActorMaterializer()
-
   implicit val executionContext = system.dispatcher
+
+  import Convert._
+  implicit val scheduler: SchedulerService = Scheduler.fixedPool("work pool", 8)
+  private val secretKey = System.getenv().getOrDefault("JWT_SECRET", "some-secret-key")
+  private val header = JwtHeader("HS256")
+  private val logger = LoggerFactory.getLogger(this.getClass)
+
+  def json[A](status: StatusCode, a: A)(implicit e: Encoder[A]): HttpResponse = {
+    HttpResponse(entity = HttpEntity(ContentType(MediaTypes.`application/json`), a.asJson.noSpaces), status = status)
+  }
+
+  def createJWT(scopes: Scopes): String = {
+    val claimsSet = JwtClaimsSet(JWT(
+      System.currentTimeMillis(),
+      scopes.jit.getOrElse(UUID.randomUUID().toString),
+      scopes.scopes
+    ).asJson.noSpaces)
+    JsonWebToken(header, claimsSet, secretKey)
+  }
+
+  private def authenticated: Directive1[JWT] = {
+    optionalHeaderValueByName("Authorization").flatMap {
+      case Some(jwt) if !isJTIValid(jwt) =>
+        complete(StatusCodes.Unauthorized -> "JWT ID rejected.")
+
+      case Some(jwt) if JsonWebToken.validate(jwt, secretKey) =>
+        getClaims(jwt) match {
+          case Some(value) => provide(value)
+          case None => complete(StatusCodes.Unauthorized -> "JWT rejected.")
+        }
+
+      case _ => complete(StatusCodes.Unauthorized)
+    }
+  }
 
   val routes =
     path("add") {
@@ -49,7 +101,7 @@ object calculate extends App {
         entity(as[String]) { e =>
           decode[Subtract](e) match {
             case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-            case Right(subtract) => complete((StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n"))
+            case Right(subtract) => complete(StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n")
           }
         }
       }
