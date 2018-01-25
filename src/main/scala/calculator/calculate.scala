@@ -135,10 +135,8 @@ object calculate extends App {
         }
     }
 
-    val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
+  println(s"The server is running at http://localhost:8080/")
+  sys.addShutdownHook(system.terminate())
+  val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
 
-    println(s"The server is running at http://localhost:8080/\nPress RETURN to stop.....")
-    StdIn.readLine()
-    bindingFuture.flatMap(_.unbind())
-    .onComplete(_ => system.terminate())
 }
