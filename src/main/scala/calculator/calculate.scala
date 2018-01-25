@@ -42,7 +42,7 @@ object calculate extends App {
   implicit val system = ActorSystem("my-system")
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
-  _
+
   private val secretKey = System.getenv().getOrDefault("JWT_SECRET", "some-secret-key")
   private val header = JwtHeader("HS256")
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -62,6 +62,17 @@ object calculate extends App {
     JsonWebToken(header, claimsSet, secretKey)
   }
 
+  private def isJTIValid(jwt: String) = getClaims(jwt) match {
+    //this functions check claims.jti to verify if he JWT ID is still valid
+    case Some(claims) => true
+    case None => false
+  }
+
+  private def getClaims(jwt: String) = jwt match {
+    case JsonWebToken(_, claims, _) => decode[JWT](claims.asJsonString).toOption
+    case _=> None
+  }
+
   private def authenticated: Directive1[JWT] = {
     optionalHeaderValueByName("Authorization").flatMap {
       case Some(jwt) if !isJTIValid(jwt) =>
@@ -75,17 +86,6 @@ object calculate extends App {
 
       case _ => complete(StatusCodes.Unauthorized)
     }
-  }
-
-  private def isJTIValid(jwt: String) = getClaims(jwt) match {
-    //this functions check claims.jti to verify if he JWT ID is still valid
-    case Some(claims) => true
-    case None => None
-  }
-
-  private def getClaims(jwt: String) = jwt match {
-    case JsonWebToken(_, claims, _) => decode[JWT](claims.asJsonString).toOption
-    case _=> None
   }
 
   val routes =
@@ -141,6 +141,7 @@ object calculate extends App {
     }
 
   println(s"The server is running at http://localhost:8080/")
+  println("To stop the server press Ctrl+C")
 
   sys.addShutdownHook(system.terminate())
   val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
