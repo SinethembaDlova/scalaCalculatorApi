@@ -77,6 +77,17 @@ object calculate extends App {
     }
   }
 
+  private def isJTIValid(jwt: String) = getClaims(jwt) match {
+    //this functions check claims.jti to verify if he JWT ID is still valid
+    case Some(claims) => true
+    case None => None
+  }
+
+  private def getClaims(jwt: String) = jwt match {
+    case JsonWebToken(_, claims, _) => decode[JWT](claims.asJsonString).toOption
+    case _=> None
+  }
+
   val routes =
     path("add") {
 //      get {
@@ -130,7 +141,6 @@ object calculate extends App {
     }
 
   println(s"The server is running at http://localhost:8080/")
-  println(s"Press Ctrl+C to stop the server.")
 
   sys.addShutdownHook(system.terminate())
   val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
