@@ -1,20 +1,20 @@
 package calculator
 
 import java.util.UUID
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 import akka.stream.ActorMaterializer
+
 import scala.io.StdIn
 import authentikat.jwt.{JsonWebToken, JwtClaimsSet, JwtHeader}
 import io.circe._
 import io.circe.generic.auto._
 import io.circe.parser._
 import io.circe.syntax._
-import monix.execution.Scheduler
-import monix.execution.schedulers.SchedulerService
 import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
@@ -42,8 +42,6 @@ object calculate extends App {
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
 
-  import Convert._
-  implicit val scheduler: SchedulerService = Scheduler.fixedPool("work pool", 8)
   private val secretKey = System.getenv().getOrDefault("JWT_SECRET", "some-secret-key")
   private val header = JwtHeader("HS256")
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -76,57 +74,67 @@ object calculate extends App {
     }
   }
 
-  val routes =
-    path("add") {
-//      get {
-//        val result = 6
-//        complete(HttpEntity(ContentTypes.`application/json`,
-//          s"""
-//            |{
-//            |  "result": $result
-//            |}
-//            |""".stripMargin))
-//      }~
-      post {
-        entity(as[String]) { e =>
-          decode[Add](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-            case Right(add) => complete(StatusCodes.OK, s"\n${add.x + add.y}\n\n")
-          }
-        }
-      }
-    } ~
-    path("subtract") {
-      post {
-        entity(as[String]) { e =>
-          decode[Subtract](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-            case Right(subtract) => complete(StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n")
-          }
-        }
-      }
-    }~
-    path("multiply") {
-      post {
-        entity(as[String]) { e =>
-          decode[Multiply](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, s"\n${e.getMessage}\n")
-            case Right(multiply) => complete(StatusCodes.OK, s"\n${multiply.x * multiply.y}\n\n")
-          }
+  private def isJTIValid(jwt: String) = getClaims(jwt) match {
+    case Some(claims) =>
+      // check claims.jti to verify if he JWT ID is still valid
+      true
+    case None => false
+  }
 
+
+  private def getClaims(jwt: String) = jwt match {
+    case JsonWebToken(_, claims, _) => decode[JWT](claims.asJsonString).toOption
+    case _ => None
+  }
+
+  val routes =
+    authenticated { claims =>
+      path("add") {
+        post {
+          entity(as[String]) { e =>
+            decode[Add](e) match {
+              // do not shadow variable names this means do not give variables in inner scopes the same name
+              // as variables from outer scopes, in this case the e as there is already a variable called e in scope
+              // the IDE highlights this and when you hover over it it will tell you that there is suspicious shadowing
+              case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+              case Right(add) => complete(StatusCodes.OK, s"\n${add.x + add.y}\n\n")
+            }
+          }
         }
-      }
-    }~
-    path("divide") {
-      post {
-         entity(as[String]) { e =>
-           decode[Divide](e) match {
-             case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-             case Right(divide) => complete(StatusCodes.OK, s"\n${divide.x /divide.y}\n\n")
-           }
-         }
-      }
+      } ~
+        path("subtract") {
+          post {
+            entity(as[String]) { e =>
+              decode[Subtract](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+                case Right(subtract) => complete(StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n")
+              }
+            }
+          }
+        } ~
+        path("multiply") {
+          post {
+            entity(as[String]) { e =>
+              decode[Multiply](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, s"\n${e.getMessage}\n")
+                case Right(multiply) => complete(StatusCodes.OK, s"\n${multiply.x * multiply.y}\n\n")
+              }
+
+            }
+          }
+        } ~
+        path("divide") {
+          post {
+            entity(as[String]) { e =>
+              decode[Divide](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+                case Right(divide) => complete(StatusCodes.OK, s"\n${divide.x / divide.y}\n\n")
+              }
+            }
+          }
+        }
     }
+
     val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
 
     println(s"The server is running at http://localhost:8080/\nPress RETURN to stop.....")
