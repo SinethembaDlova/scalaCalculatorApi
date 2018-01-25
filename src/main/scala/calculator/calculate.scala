@@ -1,24 +1,25 @@
 package calculator
 
 import java.util.UUID
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 import akka.stream.ActorMaterializer
+
+
 import scala.io.StdIn
 import authentikat.jwt.{JsonWebToken, JwtClaimsSet, JwtHeader}
 import io.circe._
 import io.circe.generic.auto._
 import io.circe.parser._
 import io.circe.syntax._
-import monix.execution.Scheduler
-import monix.execution.schedulers.SchedulerService
+
 import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
 
 case class Scopes(jit: Option[String], scopes: List[Scope])
 case class Scope(scope: String, actions: List[String])
@@ -41,8 +42,7 @@ object calculate extends App {
   implicit val system = ActorSystem("my-system")
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
-
-  import Convert._
+  _
   implicit val scheduler: SchedulerService = Scheduler.fixedPool("work pool", 8)
   private val secretKey = System.getenv().getOrDefault("JWT_SECRET", "some-secret-key")
   private val header = JwtHeader("HS256")
