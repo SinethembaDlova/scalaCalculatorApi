@@ -43,10 +43,11 @@ object calculate extends App {
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
   _
-  implicit val scheduler: SchedulerService = Scheduler.fixedPool("work pool", 8)
   private val secretKey = System.getenv().getOrDefault("JWT_SECRET", "some-secret-key")
   private val header = JwtHeader("HS256")
   private val logger = LoggerFactory.getLogger(this.getClass)
+
+
 
   def json[A](status: StatusCode, a: A)(implicit e: Encoder[A]): HttpResponse = {
     HttpResponse(entity = HttpEntity(ContentType(MediaTypes.`application/json`), a.asJson.noSpaces), status = status)
@@ -127,10 +128,10 @@ object calculate extends App {
          }
       }
     }
-    val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
 
-    println(s"The server is running at http://localhost:8080/\nPress RETURN to stop.....")
-    StdIn.readLine()
-    bindingFuture.flatMap(_.unbind())
-    .onComplete(_ => system.terminate())
+  println(s"The server is running at http://localhost:8080/")
+  println(s"Press Ctrl+C to stop the server.")
+
+  sys.addShutdownHook(system.terminate())
+  val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
 }
