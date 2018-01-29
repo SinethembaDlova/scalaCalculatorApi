@@ -60,8 +60,8 @@ object calculate extends App {
       scopes.scopes
     ).asJson.noSpaces)
     JsonWebToken(header, claimsSet, secretKey)
-  }
 
+  }
   private def isJTIValid(jwt: String) = getClaims(jwt) match {
     //this functions check claims.jti to verify if he JWT ID is still valid
     case Some(claims) => true
@@ -89,60 +89,63 @@ object calculate extends App {
   }
 
   val routes =
-    path("add") {
-//      get {
-//        val result = 6
-//        complete(HttpEntity(ContentTypes.`application/json`,
-//          s"""
-//            |{
-//            |  "result": $result
-//            |}
-//            |""".stripMargin))
-//      }~
-      post {
-        entity(as[String]) { e =>
-          decode[Add](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-            case Right(add) => complete(StatusCodes.OK, s"\n${add.x + add.y}\n\n")
+    authenticated { claims =>
+      path("add") {
+        //      get {
+        //        val result = 6
+        //        complete(HttpEntity(ContentTypes.`application/json`,
+        //          s"""
+        //            |{
+        //            |  "result": $result
+        //            |}
+        //            |""".stripMargin))
+        //      }~
+        post {
+          entity(as[String]) { e =>
+            decode[Add](e) match {
+              case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+              case Right(add) => complete(StatusCodes.OK, s"\n${add.x + add.y}\n\n")
+            }
           }
         }
-      }
-    } ~
-    path("subtract") {
-      post {
-        entity(as[String]) { e =>
-          decode[Subtract](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-            case Right(subtract) => complete(StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n")
+      } ~
+        path("subtract") {
+          post {
+            entity(as[String]) { e =>
+              decode[Subtract](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+                case Right(subtract) => complete(StatusCodes.OK, s"\n${subtract.x - subtract.y}\n\n")
+              }
+            }
           }
-        }
-      }
-    }~
-    path("multiply") {
-      post {
-        entity(as[String]) { e =>
-          decode[Multiply](e) match {
-            case Left(e) => complete(StatusCodes.BadRequest, s"\n${e.getMessage}\n")
-            case Right(multiply) => complete(StatusCodes.OK, s"\n${multiply.x * multiply.y}\n\n")
-          }
+        }~
+        path("multiply") {
+          post {
+            entity(as[String]) { e =>
+              decode[Multiply](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, s"\n${e.getMessage}\n")
+                case Right(multiply) => complete(StatusCodes.OK, s"\n${multiply.x * multiply.y}\n\n")
+              }
 
+            }
+          }
+        }~
+        path("divide") {
+          post {
+            entity(as[String]) { e =>
+              decode[Divide](e) match {
+                case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
+                case Right(divide) => complete(StatusCodes.OK, s"\n${divide.x /divide.y}\n\n")
+              }
+            }
+          }
         }
-      }
-    }~
-    path("divide") {
-      post {
-         entity(as[String]) { e =>
-           decode[Divide](e) match {
-             case Left(e) => complete(StatusCodes.BadRequest, e.getMessage)
-             case Right(divide) => complete(StatusCodes.OK, s"\n${divide.x /divide.y}\n\n")
-           }
-         }
-      }
     }
+
 
   println(s"The server is running at http://localhost:8080/")
   println("To stop the server press Ctrl+C")
-
+  println(createJWT(Scopes(None,List(Scope("add", List()), Scope("subtract", List()), Scope("divide", List()),Scope("multiply", List())))))
   sys.addShutdownHook(system.terminate())
   val bindingFuture = Http().bindAndHandle(routes, "localhost", 8080)
 }
